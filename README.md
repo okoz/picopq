@@ -8,13 +8,13 @@ Tiny C++17 wrapper for libpq providing a binary interface to PostgreSQL.
 
 ## Usage
 
-The table created using
+The table created using:
 
 ```SQL
 CREATE TABLE characters( id bigint, name text );
 ```
 
-can be queried with
+can be queried with:
 
 ```C++
 #include <ppq.h>
@@ -31,6 +31,13 @@ catch ( ppq::exception const& e )
 {
     std::cout << e.what() << std::endl;
 }
+```
+
+There is also a way to prepare queries:
+
+```C++
+connection.prepare( "get_character", "SELECT id, name FROM characters WHERE id = $1" );
+connection.execute_prepared( "get_characters", 1ll );
 ```
 
 ## Extensions
