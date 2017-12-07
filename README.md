@@ -21,9 +21,9 @@ can be queried with
 
 try
 {
-    ppq::result result = connection_.execute( "SELECT id, name FROM characters WHERE id = $1", 1ull );
+    ppq::result result = connection_.execute( "SELECT id, name FROM characters WHERE id = $1", 1ll );
     for ( ppq::row row : result )
-        std::cout << row.at< uint64_t >( 0 ) << " - " << row.at< char const* >( 1 ) << std::endl;
+        std::cout << row.at< int64_t >( 0 ) << " - " << row.at< char const* >( 1 ) << std::endl;
 }
 catch ( ppq::exception const& e )
 {
