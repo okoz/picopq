@@ -29,7 +29,7 @@ namespace ppq
 		// Convert values into network format.
 
 		template< typename T >
-		constexpr T to_network( T value ) { static_assert( false, "Unknown type" ); }
+		constexpr T to_network( T value ) { static_assert( !std::is_same_v< T, T >, "Unknown type" ); }
 
 		template<>
 		constexpr uint8_t to_network( uint8_t value ) { return value; }
