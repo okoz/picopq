@@ -55,6 +55,33 @@ namespace ppq
 		template<>
 		constexpr int64_t to_network( int64_t value ) { return byte_swap_64( value ); }
 
+		template< typename T, typename U >
+		union conversion_helper
+		{
+			static_assert( sizeof( T ) == sizeof( U ) );
+
+			T a;
+			U b;
+		};
+
+		template<>
+		constexpr float to_network( float value )
+		{
+			conversion_helper< float, uint32_t > helper{};
+			helper.a = value;
+			helper.b = byte_swap_32( helper.b );
+			return helper.a;
+		}
+
+		template<>
+		constexpr double to_network( double value )
+		{
+			conversion_helper< double, uint64_t > helper{};
+			helper.a = value;
+			helper.b = byte_swap_64( helper.b );
+			return helper.a;
+		}
+
 		// Pointers get sent straight through.
 		template< typename T >
 		constexpr T* to_network( T* value ) { return value; }
@@ -87,6 +114,22 @@ namespace ppq
 
 		template<>
 		constexpr int64_t from_network( char const* value ) { return byte_swap_64( *reinterpret_cast< int64_t const* >( value ) ); }
+
+		template<>
+		constexpr float from_network( char const* value )
+		{
+			conversion_helper< float, uint32_t > helper{};
+			helper.b = byte_swap_32( *reinterpret_cast< uint32_t const* >( value ) );
+			return helper.a;
+		}
+
+		template<>
+		constexpr double from_network( char const* value )
+		{
+			conversion_helper< double, uint64_t > helper{};
+			helper.b = byte_swap_64( *reinterpret_cast< uint64_t const* >( value ) );
+			return helper.a;
+		}
 	}
 
 	class exception : public std::runtime_error
