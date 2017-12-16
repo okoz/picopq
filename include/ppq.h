@@ -242,6 +242,11 @@ namespace ppq
 			return from_network< T >( value );
 		}
 
+		bool is_null( size_t i )
+		{
+			return PQgetvalue( result_, static_cast< int >( row_ ), static_cast< int >( i ) ) == nullptr;
+		}
+
 	protected:
 		friend class result;
 
