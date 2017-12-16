@@ -26,6 +26,18 @@ namespace ppq
 				| byte_swap_32( value >> 32 );
 		}
 
+		template< typename T >
+		char const* const_charify( T const& value ) { return reinterpret_cast< char const* >( &value ); }
+
+		template<>
+		char const* const_charify( char const* const& value ) { return value; }
+
+		template< typename T >
+		constexpr int param_length( T const& value ) { return sizeof( T ); }
+
+		template<>
+		constexpr int param_length< char const* >( char const* const& value ) { return 0; }
+
 		// Convert values into network format.
 
 		template< typename T >
@@ -83,8 +95,87 @@ namespace ppq
 		}
 
 		// Pointers get sent straight through.
+
 		template< typename T >
 		constexpr T* to_network( T* value ) { return value; }
+
+		// Somewhat more complicated support for arrays and vectors.
+
+		template< typename T >
+		constexpr Oid get_oid() { static_assert( !std::is_same_v< T, T >, "Unknown type" ); }
+
+		template<>
+		constexpr Oid get_oid< int64_t >() { return 20; }
+
+		template< typename T >
+		struct vector_helper
+		{
+#pragma pack( push, 4 )
+			struct pq_array
+			{
+				int32_t n_dimensions;
+				int32_t data_offset;
+				Oid element_type;
+
+				int32_t size;
+				int32_t index;
+
+				// Followed by data.
+
+				pq_array( Oid element_type, size_t size )
+					: n_dimensions( byte_swap_32( 1 ) )
+					, data_offset{ 0 }
+					, element_type( byte_swap_32( element_type ) )
+					, size( byte_swap_32( static_cast< int32_t >( size ) ) )
+					, index{ 0 }
+				{
+				}
+			};
+#pragma pack( pop )
+
+#pragma pack( push, 1 )
+			struct pq_value
+			{
+				int32_t length;
+				T value;
+			};
+#pragma pack( pop )
+
+		public:
+			vector_helper( std::vector< T > const& v )
+				: bytes_( sizeof( pq_array ) + v.size() * sizeof( pq_value ) )
+			{
+				constexpr int32_t value_length = byte_swap_32( sizeof( T ) );
+
+				pq_array* header = new ( bytes_.data() ) pq_array( get_oid< T >(), v.size() );
+				pq_value* element = reinterpret_cast< pq_value* >( header + 1 );
+
+				for ( T const& value : v )
+				{
+					element->length = value_length;
+					element->value = to_network( value );
+					element++;
+				}
+			}
+
+			vector_helper( vector_helper const& ) = delete;
+			vector_helper( vector_helper&& ) = default;
+
+			char const* data() const { return bytes_.data(); }
+			int length() const { return static_cast< int >( bytes_.size() ); }
+
+		private:
+			std::vector< char > bytes_;
+		};
+
+		template< typename T >
+		vector_helper< T > to_network( std::vector< T > const& value ) { return vector_helper< T >( value ); }
+
+		template< typename T >
+		char const* const_charify( vector_helper< T > const& value ) { return value.data(); }
+
+		template< typename T >
+		int param_length( vector_helper< T > const& value ) { return value.length(); }
 
 		// Convert values from network format.
 
@@ -268,18 +359,6 @@ namespace ppq
 
 		template<>
 		constexpr int is_binary< char const* > = 0;
-
-		template< typename T >
-		constexpr int param_length = sizeof( T );
-
-		template<>
-		constexpr int param_length< char const* > = 0;
-
-		template< typename T >
-		char const* const_charify( T const& value ) { return reinterpret_cast< char const* >( &value ); }
-
-		template<>
-		char const* const_charify( char const* const& value ) { return value; }
 	}
 
 	class connection
@@ -313,13 +392,13 @@ namespace ppq
 		}
 
 		template< typename... Ts >
-		result execute( char const* query, Ts... args )
+		result execute( char const* query, Ts const&... args )
 		{
 			return really_execute( PQexecParams, std::make_index_sequence< sizeof...( Ts ) >{}, query, args... );
 		}
 
 		template< typename... Ts >
-		result execute_prepared( char const* name, Ts... args )
+		result execute_prepared( char const* name, Ts const&... args )
 		{
 			return really_execute( PQexecPreparedWrapper, std::make_index_sequence< sizeof...( Ts ) >{}, name, args... );
 		}
@@ -347,7 +426,7 @@ namespace ppq
 		}
 
 		template< typename E, typename... Ts, size_t... Is >
-		result really_execute( E executor, std::index_sequence< Is... >, const char* query, Ts... args )
+		result really_execute( E executor, std::index_sequence< Is... >, const char* query, Ts const&... args )
 		{
 			constexpr int num_params = sizeof...( args );
 
@@ -372,7 +451,7 @@ namespace ppq
 			{
 				auto params = std::make_tuple( to_network( args )... );
 				char const* param_values[] = { const_charify( std::get< Is >( params ) )... };
-				int const param_lengths[] = { param_length< Ts >... };
+				int const param_lengths[] = { param_length( std::get< Is >( params ) )... };
 				int const param_formats[] = { is_binary< Ts >... };
 
 				result res( executor(
