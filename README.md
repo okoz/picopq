@@ -42,8 +42,6 @@ connection.execute_prepared( "get_characters", 1ll );
 
 Parameters of type std::vector are also supported:
 
-can be queried with:
-
 ```C++
 std::vector< int64_t > ids{ 1ll, 2ll };
 ppq::result result = connection.execute( "SELECT name FROM characters WHERE id = ANY($1)", ids );
